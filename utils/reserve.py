@@ -382,7 +382,7 @@ class reserve:
         logging.info(f"[Captcha] tp={tp_url}")
 
         x = self._calc_slide_distance(bg_url, tp_url)
-        x += random.randint(1, 5)
+        x += random.randint(-2, 2)
         logging.info(f"Successfully calculate the captcha distance {x}")
 
         return self._submit_captcha_result(captcha_token, x)
