@@ -175,10 +175,19 @@ class reserve:
             if not token:
                 logging.error(f"Token missing from {url}")
                 logging.error(f"  HTTP {resp.status_code}, final URL: {resp.url}")
-                # cookie 诊断
-                op_c = {c.name: c.value[:20] + '...' if len(c.value) > 20 else c.value
-                        for c in self._sess_op.cookies if c.name.upper() in ('JSESSIONID', 'UID', 'UNAME')}
-                logging.error(f"  Op cookies: {op_c}")
+                # cookie 诊断（防御性：curl_cffi 的 cookies 可能混入非标准元素）
+                try:
+                    op_c = {}
+                    for c in self._sess_op.cookies:
+                        try:
+                            if c.name.upper() in ('JSESSIONID', 'UID', 'UNAME'):
+                                v = str(c.value)
+                                op_c[c.name] = v[:30] + '...' if len(v) > 30 else v
+                        except Exception:
+                            continue
+                    logging.error(f"  Op cookies: {op_c}")
+                except Exception as e:
+                    logging.error(f"  Cookie 诊断失败: {e}")
                 logging.error(f"  HTML preview: {html[:500]}")
                 # 检测 Session 过期/被重定向
                 if "passport" in str(resp.url) or "login" in html[:500].lower() or len(html) < 200:
@@ -214,12 +223,34 @@ class reserve:
 
     def _sync_cookies(self):
         """同步登录 cookie → 操作 session + 域名预热"""
+        count = 0
         try:
             for c in self._sess_login.cookies:
-                domain = c.domain if c.domain else ".chaoxing.com"
-                self._sess_op.cookies.set(c.name, c.value, domain=domain, path=c.path)
-        except Exception:
-            pass
+                try:
+                    domain = c.domain if c.domain else ".chaoxing.com"
+                    self._sess_op.cookies.set(c.name, c.value, domain=domain, path=c.path)
+                    count += 1
+                except Exception:
+                    continue
+        except Exception as e:
+            logging.warning(f"[Cookie] 遍历出错: {e}")
+        if count == 0:
+            logging.warning("[Cookie] 未复制到任何 cookie, 尝试 fallback 方式...")
+            # fallback: 直接从 response 的 Set-Cookie 头手动提取
+            try:
+                if hasattr(self._sess_login, 'cookies'):
+                    jar = self._sess_login.cookies
+                    for cookie_name in jar.keys():
+                        try:
+                            domain = ".chaoxing.com"
+                            self._sess_op.cookies.set(cookie_name, jar.get(cookie_name),
+                                                      domain=domain, path="/")
+                            count += 1
+                        except Exception:
+                            continue
+            except Exception as e2:
+                logging.warning(f"[Cookie] fallback 也失败: {e2}")
+        logging.info(f"[Cookie] 同步完成: {count} 个")
         # 域名预热: 让 office.chaoxing.com 设置 domain 级 cookie
         try:
             self._sess_op.get(self.home_url,
@@ -228,6 +259,7 @@ class reserve:
         except Exception:
             pass
         self._human_long_delay(0.5, 1.5)
+        return count  # 返回同步数量，0=失败
 
     def login(self, username: str, password: str):
         self._username = username
@@ -248,7 +280,12 @@ class reserve:
                 obj = resp.json()
                 if obj.get("status"):
                     logging.info("Login OK")
-                    self._sync_cookies()
+                    cookies_synced = self._sync_cookies()
+                    if cookies_synced == 0:
+                        logging.warning(f"Login OK 但 cookie 同步 0 个! ({attempt + 1}/3)")
+                        if attempt < 2:
+                            self._backoff(attempt)
+                        continue
                     self._stale_session = False
                     return (True, "")
                 else:
@@ -505,14 +542,18 @@ class reserve:
             "Sec-Fetch-Site": "same-origin",
         })
         self._human_delay(0.08, 0.35)
-        raw = self._sess_op.post(
-            url=self.submit_url, params=parm, headers=hdrs
-        ).content.decode("utf-8")
+        try:
+            raw = self._sess_op.post(
+                url=self.submit_url, params=parm, headers=hdrs
+            ).content.decode("utf-8")
+        except Exception as e:
+            logging.error(f"Submit POST 失败: {e}")
+            return False
         try:
             result = json.loads(raw)
             self.submit_msg.append(f"{times[0]}~{times[1]}: {result}")
             logging.info(f"Result: {result}")
-            return result.get("success", False)
         except json.JSONDecodeError:
             logging.error(f"Bad JSON: {raw[:200]}")
             return False
+        return result.get("success", False)
