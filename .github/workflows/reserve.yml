@@ -46,4 +46,4 @@ jobs:
         run: |
           # config.json 含密码不入 git，从模板生成（实际密码由 secrets 注入）
           cp config.example.json config.json
-          python main.py -m debug  --action
+          python main.py -m debug --action
