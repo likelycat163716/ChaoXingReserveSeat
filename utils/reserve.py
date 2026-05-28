@@ -279,7 +279,7 @@ class reserve:
                 resp = self._sess_login.post(url=self.login_url, params=parm)
                 obj = resp.json()
                 if obj.get("status"):
-                    logging.info("Login OK")
+                    logging.info(f"User {username} login successfully")
                     cookies_synced = self._sync_cookies()
                     if cookies_synced == 0:
                         logging.warning(f"Login OK 但 cookie 同步 0 个! ({attempt + 1}/3)")
@@ -366,7 +366,7 @@ class reserve:
 
     def resolve_captcha(self):
         """外部入口, 解滑块验证码, 返回 validate token"""
-        logging.info("[Captcha] start")
+        logging.info("Start to resolve captcha token")
         data = self._fetch_captcha_raw("slide")
         if not data:
             return ""
@@ -377,10 +377,13 @@ class reserve:
         except KeyError:
             logging.error("[Captcha] parse fail")
             return ""
+        logging.info(f"Successfully get prepared captcha_token {captcha_token}")
+        logging.info(f"[Captcha] bg={bg_url}")
+        logging.info(f"[Captcha] tp={tp_url}")
 
         x = self._calc_slide_distance(bg_url, tp_url)
         x += random.randint(1, 5)
-        logging.info(f"[Captcha] distance={x}px")
+        logging.info(f"Successfully calculate the captcha distance {x}")
 
         return self._submit_captcha_result(captcha_token, "slide", self._build_slide_traj(x))
 
@@ -443,11 +446,12 @@ class reserve:
             params=params, headers=self._mk_captcha_headers())
         text = resp.text.replace(cb + "(", "").replace(")", "")
         data = json.loads(text)
-        logging.info(f"[Captcha] result={data}")
         try:
-            return json.loads(data.get("extraData", "{}")).get("validate", "")
+            validate = json.loads(data.get("extraData", "{}")).get("validate", "")
         except Exception:
-            return ""
+            validate = ""
+        logging.info(f"[Captcha] validate={validate}, result={data.get('result')}")
+        return validate
 
     # ================================================================
     #  Submit
@@ -491,15 +495,15 @@ class reserve:
                     continue
 
                 consecutive_token_fails = 0
-                logging.info(f"Token: {token[:30]}...")
+                logging.info(f"Get token: {token}")
 
                 captcha = ""
                 if self.enable_slider:
                     captcha = self.resolve_captcha()
-                    if not captcha:
-                        logging.warning("Captcha fail")
-                        self._human_delay(1.0, 2.5)
-                        continue
+                    if captcha:
+                        logging.info(f"Captcha token {captcha}")
+                    else:
+                        logging.warning("Captcha fail, 尝试无验证码提交")
 
                 if self._do_submit(times, token, roomid, seat,
                                    captcha, action, value):
@@ -530,7 +534,7 @@ class reserve:
         }
         parm["enc"] = verify_param(parm, value)
 
-        logging.info(f"Submit: {json.dumps(parm, ensure_ascii=False)}")
+        logging.info(f"submit parameter {json.dumps(parm, ensure_ascii=False)}")
 
         ref = self.url.format(roomid, seatid)
         hdrs = self._mk_op_headers(referer=ref)
