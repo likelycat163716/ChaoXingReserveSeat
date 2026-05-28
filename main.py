@@ -24,16 +24,19 @@ get_current_dayofweek = lambda action: (
 
 
 SLEEPTIME = 0.0  # 每次抢座的间隔
-ENDTIME = "07:29:00"  # 根据学校的预约座位时间+1min即可
+ENDTIME = "20:01:00"  # 根据学校的预约座位时间+1min即可
 
-ENABLE_SLIDER = True  # 是否有滑块验证
-MAX_ATTEMPT = 5  # 最大尝试次数
-RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
+ENABLE_SLIDER = True       # 是否启用验证码
+CAPTCHA_TYPE = "auto"      # 验证码类型: "slide" | "click" | "auto"
+MAX_ATTEMPT = 5            # 最大尝试次数
+RESERVE_NEXT_DAY = False   # 预约明天而不是今天的
 
 
 def login_and_reserve(users, usernames, passwords, action, success_list=None):
     logging.info(
-        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\nENABLE_SLIDER: {ENABLE_SLIDER}\nRESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
+        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\n"
+        f"ENABLE_SLIDER: {ENABLE_SLIDER}\nCAPTCHA_TYPE: {CAPTCHA_TYPE}\n"
+        f"RESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
     )
     if action and len(usernames.split(",")) != len(users):
         raise Exception("user number should match the number of config")
@@ -59,6 +62,7 @@ def login_and_reserve(users, usernames, passwords, action, success_list=None):
                 max_attempt=MAX_ATTEMPT,
                 enable_slider=ENABLE_SLIDER,
                 reserve_next_day=RESERVE_NEXT_DAY,
+                captcha_type=CAPTCHA_TYPE,
             )
             s.get_login_status()
             s.login(username, password)
@@ -84,11 +88,11 @@ def main(users, action=False):
  
     target_hour = 19
     target_minute = 59
-    target_second = 50
+    target_second = 57
     target_wait=0
     logging.info(f"等待到 {target_hour:02d}:{target_minute:02d}:{target_second:02d} 再开始抢座...")
 
-    while False:
+    while True:
         now_ts = time.time() + (8 * 3600 if action else 0)
         now = time.localtime(now_ts)
         if (now.tm_hour == target_hour and
@@ -104,24 +108,27 @@ def main(users, action=False):
     
     while current_time < ENDTIME:
         attempt_times += 1
+        current_time = get_current_time(action)
+        logging.info(f"=== 第 {attempt_times} 轮开始 ({current_time}) ===")
         # try:
         success_list = login_and_reserve(
             users, usernames, passwords, action, success_list
         )
         # except Exception as e:
         #     print(f"An error occurred: {e}")
-        print(
-            f"attempt time {attempt_times}, time now {current_time}, success list {success_list}"
+        logging.info(
+            f"=== 第 {attempt_times} 轮结束, time={current_time}, success={success_list} ==="
         )
-        current_time = get_current_time(action)
         if sum(success_list) == today_reservation_num:
-            print(f"reserved successfully!")
+            logging.info("全部预约成功!")
             return
 
 
 def debug(users, action=False):
     logging.info(
-        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\nENABLE_SLIDER: {ENABLE_SLIDER}\nRESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
+        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\n"
+        f"ENABLE_SLIDER: {ENABLE_SLIDER}\nCAPTCHA_TYPE: {CAPTCHA_TYPE}\n"
+        f"RESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
     )
     suc = False
     logging.info(f" Debug Mode start! , action {'on' if action else 'off'}")
@@ -146,11 +153,16 @@ def debug(users, action=False):
             max_attempt=MAX_ATTEMPT,
             enable_slider=ENABLE_SLIDER,
             reserve_next_day=RESERVE_NEXT_DAY,
+            captcha_type=CAPTCHA_TYPE,
         )
         s.get_login_status()
         s.login(username, password)
         s.requests.headers.update({"Host": "office.chaoxing.com"})
-        suc = s.submit(times, roomid, seatid, action)
+        try:
+            suc = s.submit(times, roomid, seatid, action)
+        except Exception as e:
+            logging.error(f"Submit 崩溃: {e}")
+            suc = False
         if suc:
             return
 
@@ -163,6 +175,7 @@ def get_roomid(args1, args2):
         max_attempt=MAX_ATTEMPT,
         enable_slider=ENABLE_SLIDER,
         reserve_next_day=RESERVE_NEXT_DAY,
+        captcha_type=CAPTCHA_TYPE,
     )
     s.get_login_status()
     s.login(username=username, password=password)
