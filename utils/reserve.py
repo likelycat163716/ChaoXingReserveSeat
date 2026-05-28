@@ -385,7 +385,7 @@ class reserve:
         x += random.randint(1, 5)
         logging.info(f"Successfully calculate the captcha distance {x}")
 
-        return self._submit_captcha_result(captcha_token, "slide", self._build_slide_traj(x))
+        return self._submit_captcha_result(captcha_token, x)
 
     def _calc_slide_distance(self, bg_url: str, tp_url: str) -> int:
         import numpy as np
@@ -420,34 +420,13 @@ class reserve:
             logging.info(f"[Captcha] edge match max_val={max_val:.4f}, x={max_loc[0]}")
         return max_loc[0]
 
-    @staticmethod
-    def _build_slide_traj(dist: int) -> list:
-        """滑动轨迹: 加速→匀速→减速→微调"""
-        if dist <= 0:
-            return [{"x": 0, "y": 0}]
-        track, cur = [], 0
-        stages = [
-            (0, int(dist * 0.35), 2, 4, (-1, 1)),
-            (0, int(dist * 0.70), 3, 6, (-1, 1)),
-            (0, int(dist * 0.95), 5, 8, (-1, 1)),
-            (0, dist + 1, 1, 2, (0, 1)),
-        ]
-        for lo, hi, s_min, s_max, yr in stages:
-            lo = cur
-            for i in range(max(lo, 0), min(hi, dist + 1), random.randint(s_min, s_max)):
-                cur = min(i, dist)
-                track.append({"x": cur, "y": random.randint(*yr)})
-        if track[-1]["x"] != dist:
-            track.append({"x": dist, "y": 0})
-        return track
-
-    def _submit_captcha_result(self, captcha_token: str, captcha_type: str,
-                                click_arr: list) -> str:
-        cb = f"jQuery{random.randint(111111111, 999999999)}_{int(time.time() * 1000)}"
+    def _submit_captcha_result(self, captcha_token: str, x: int) -> str:
+        """提交验证码结果, 使用简单 [{"x": x}] 格式 (超星不接受复杂轨迹)"""
+        cb = f"jQuery{random.randint(100000000, 999999999)}_{int(time.time() * 1000)}"
         params = {
             "callback": cb, "captchaId": "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1",
-            "type": captcha_type, "token": captcha_token,
-            "textClickArr": json.dumps(click_arr),
+            "type": "slide", "token": captcha_token,
+            "textClickArr": json.dumps([{"x": x}]),
             "coordinate": json.dumps([]), "runEnv": "10", "version": "1.1.18",
             "_": int(time.time() * 1000),
         }
