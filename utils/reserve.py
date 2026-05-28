@@ -404,11 +404,21 @@ class reserve:
         tpc = self._sess_captcha.get(tp_url, headers=ch)
         bg_img = cv2.imdecode(np.frombuffer(bgc.content, np.uint8), cv2.IMREAD_COLOR)
         tp_img = _cut_slide(tpc.content)
-        bg_e, tp_e = cv2.Canny(bg_img, 100, 200), cv2.Canny(tp_img, 100, 200)
-        res = cv2.matchTemplate(cv2.cvtColor(bg_e, cv2.COLOR_GRAY2RGB),
-                                cv2.cvtColor(tp_e, cv2.COLOR_GRAY2RGB),
-                                cv2.TM_CCOEFF_NORMED)
-        return cv2.minMaxLoc(res)[3][0]
+
+        # 直接模板匹配 (Canny 边缘检测在低对比度图上不可靠)
+        res = cv2.matchTemplate(bg_img, tp_img, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        logging.info(f"[Captcha] raw match max_val={max_val:.4f}, x={max_loc[0]}")
+        if max_val < 0.3:
+            logging.warning(f"[Captcha] 匹配置信度过低 ({max_val:.3f}), 尝试边缘匹配")
+            bg_e = cv2.Canny(bg_img, 100, 200)
+            tp_e = cv2.Canny(tp_img, 100, 200)
+            res = cv2.matchTemplate(cv2.cvtColor(bg_e, cv2.COLOR_GRAY2RGB),
+                                    cv2.cvtColor(tp_e, cv2.COLOR_GRAY2RGB),
+                                    cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+            logging.info(f"[Captcha] edge match max_val={max_val:.4f}, x={max_loc[0]}")
+        return max_loc[0]
 
     @staticmethod
     def _build_slide_traj(dist: int) -> list:
