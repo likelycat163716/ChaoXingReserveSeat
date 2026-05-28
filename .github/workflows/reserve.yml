@@ -3,9 +3,7 @@ name: auto_Reserve
 on:
   workflow_dispatch:  # 手动触发
   schedule:
-    # 北京时间每天 19:50 (UTC 11:50)，留足够时间装依赖
-    # 脚本内部会等待到 19:59:57 再开始抢座
-    - cron: "50 11 * * *"
+    
 
 jobs:
   build:
