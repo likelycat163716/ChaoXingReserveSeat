@@ -1,14 +1,11 @@
 name: auto_Reserve
 
 on:
-  workflow_dispatch:  # 手动触发
-  schedule:
-    
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 设置北京时区
     env:
       TZ: Asia/Shanghai
 
@@ -44,6 +41,5 @@ jobs:
           USERNAMES: ${{ secrets.USERNAMES }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
         run: |
-          # config.json 含密码不入 git，从模板生成（实际密码由 secrets 注入）
           cp config.example.json config.json
           python main.py -m debug --action
