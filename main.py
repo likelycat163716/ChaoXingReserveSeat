@@ -32,7 +32,7 @@ MAX_ATTEMPT = 5        # 最大尝试次数
 RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
 
 # Playwright 模式（部分网络环境被超星TLS拦截，默认关闭；能用就开）
-USE_PLAYWRIGHT = False
+USE_PLAYWRIGHT = True 
 
 # 超级鹰打码平台（文字点选验证码需要，滑块不需要）
 CJY_USER = ""          # 超级鹰用户名
