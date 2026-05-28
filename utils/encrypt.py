@@ -36,14 +36,14 @@ def enc(submit_info):
     return md5(seq.encode("utf-8")).hexdigest()
 
 
-def generate_captcha_key(timestamp: int):
+def generate_captcha_key(timestamp: int, captcha_type: str = "slide"):
     captcha_key = md5((str(timestamp) + str(uuid1())).encode("utf-8")).hexdigest()
     encoded_timestamp = (
         md5(
             (
                 str(timestamp)
                 + "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1"
-                + "slide"
+                + captcha_type
                 + captcha_key
             ).encode("utf-8")
         ).hexdigest()
@@ -51,6 +51,15 @@ def generate_captcha_key(timestamp: int):
         + str(int(timestamp) + 0x493E0)
     )
     return [captcha_key, encoded_timestamp]
+
+
+def generate_iv(timestamp: int, captcha_type: str = "slide") -> str:
+    """
+    生成 IMAGE_VERIFY_TAG / iv 参数
+    SDK 中: md5(captchaId + type + Date.now() + uuid())
+    """
+    data = "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1" + captcha_type + str(timestamp) + str(uuid1())
+    return md5(data.encode("utf-8")).hexdigest()
 
 
 def sort_dict_by_keys(dictionary):
