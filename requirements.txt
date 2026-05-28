@@ -1,0 +1,20 @@
+# 超星选座自动预约 —— 依赖列表
+# Python 3.10+
+
+# HTTP 请求（带 TLS 指纹伪装，绕过超星 JA3 检测）
+# curl_cffi>=0.6 提供 chrome110~131 impersonate 支持
+curl_cffi>=0.6.0
+
+# 加密（登录密码 AES 加密、MD5 签名）
+cryptography>=41.0
+
+# 图像处理（滑块验证码 OpenCV 匹配）
+opencv-python>=4.8.0
+numpy>=1.24
+
+# 验证码识别（文字点选 fallback OCR）
+# 注意：PaddleOCR 在 GitHub Actions 环境中安装较大（>1GB），
+# 文字点选主要靠图鉴/超级鹰打码平台，OCR 仅作 fallback。
+# 如果不需要 fallback 可注释掉下面两行以加速 CI：
+# paddlepaddle>=3.0.0
+# paddleocr>=2.7.0
