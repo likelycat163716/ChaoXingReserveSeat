@@ -23,17 +23,28 @@ get_current_dayofweek = lambda action: (
 )
 
 
-SLEEPTIME = 0.0  # 每次抢座的间隔
-ENDTIME = "20:01:00"  # 根据学校的预约座位时间+1min即可
+SLEEPTIME = 0.0        # 每次抢座的间隔
+ENDTIME = "20:01:00"   # 根据学校的预约座位时间+1min即可
 
-ENABLE_SLIDER = True  # 是否有滑块验证
-MAX_ATTEMPT = 5  # 最大尝试次数
+# 验证码类型（已废弃，现在由服务器 captcha/type API 动态决定）
+CAPTCHA_TYPE = "slide"
+MAX_ATTEMPT = 5        # 最大尝试次数
 RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
+
+# Playwright 模式（部分网络环境被超星TLS拦截，默认关闭；能用就开）
+USE_PLAYWRIGHT = False
+
+# 超级鹰打码平台（文字点选验证码需要，滑块不需要）
+CJY_USER = ""          # 超级鹰用户名
+CJY_PASS = ""          # 超级鹰密码
+CJY_SOFT_ID = ""       # 软件ID
 
 
 def login_and_reserve(users, usernames, passwords, action, success_list=None):
     logging.info(
-        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\nENABLE_SLIDER: {ENABLE_SLIDER}\nRESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
+        f"Global settings: SLEEPTIME={SLEEPTIME} ENDTIME={ENDTIME} "
+        f"CAPTCHA_TYPE={CAPTCHA_TYPE} USE_PLAYWRIGHT={USE_PLAYWRIGHT} "
+        f"MAX_ATTEMPT={MAX_ATTEMPT} RESERVE_NEXT_DAY={RESERVE_NEXT_DAY}"
     )
     if action and len(usernames.split(",")) != len(users):
         raise Exception("user number should match the number of config")
@@ -57,13 +68,19 @@ def login_and_reserve(users, usernames, passwords, action, success_list=None):
             s = reserve(
                 sleep_time=SLEEPTIME,
                 max_attempt=MAX_ATTEMPT,
-                enable_slider=ENABLE_SLIDER,
+                captcha_type=CAPTCHA_TYPE,
                 reserve_next_day=RESERVE_NEXT_DAY,
+                use_playwright=USE_PLAYWRIGHT,
+                cjy_user=CJY_USER,
+                cjy_pass=CJY_PASS,
+                cjy_soft_id=CJY_SOFT_ID,
             )
             s.get_login_status()
             s.login(username, password)
-            s.requests.headers.update({"Host": "office.chaoxing.com"})
-            suc = s.submit(times, roomid, seatid, action)
+            s.session.headers.update({"Host": "office.chaoxing.com"})
+            # 确保 seatid 是列表
+            _seats = [seatid] if isinstance(seatid, str) else seatid
+            suc = s.submit(times, roomid, _seats, action)
             success_list[index] = suc
     return success_list
 
@@ -85,7 +102,7 @@ def main(users, action=False):
     target_hour = 19
     target_minute = 59
     target_second = 57
-    target_wait=0
+    target_wait = 0
     logging.info(f"等待到 {target_hour:02d}:{target_minute:02d}:{target_second:02d} 再开始抢座...")
 
     while True:
@@ -104,12 +121,9 @@ def main(users, action=False):
     
     while current_time < ENDTIME:
         attempt_times += 1
-        # try:
         success_list = login_and_reserve(
             users, usernames, passwords, action, success_list
         )
-        # except Exception as e:
-        #     print(f"An error occurred: {e}")
         print(
             f"attempt time {attempt_times}, time now {current_time}, success list {success_list}"
         )
@@ -117,20 +131,26 @@ def main(users, action=False):
         if sum(success_list) == today_reservation_num:
             print(f"reserved successfully!")
             return
+        # 每次抢座间隔，避免频繁请求被封
+        if SLEEPTIME > 0:
+            time.sleep(SLEEPTIME)
+        else:
+            time.sleep(0.5)  # 最小间隔 0.5s
 
 
 def debug(users, action=False):
     logging.info(
-        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\nENABLE_SLIDER: {ENABLE_SLIDER}\nRESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
+        f"Global settings: SLEEPTIME={SLEEPTIME} ENDTIME={ENDTIME} "
+        f"CAPTCHA_TYPE={CAPTCHA_TYPE} USE_PLAYWRIGHT={USE_PLAYWRIGHT} "
+        f"MAX_ATTEMPT={MAX_ATTEMPT} RESERVE_NEXT_DAY={RESERVE_NEXT_DAY}"
     )
-    suc = False
-    logging.info(f" Debug Mode start! , action {'on' if action else 'off'}")
+    logging.info(f"Debug Mode start! action={'on' if action else 'off'}")
     if action:
         usernames, passwords = get_user_credentials(action)
     current_dayofweek = get_current_dayofweek(action)
     for index, user in enumerate(users):
         username, password, times, roomid, seatid, daysofweek = user.values()
-        if type(seatid) == str:
+        if isinstance(seatid, str):
             seatid = [seatid]
         if action:
             username, password = (
@@ -144,12 +164,16 @@ def debug(users, action=False):
         s = reserve(
             sleep_time=SLEEPTIME,
             max_attempt=MAX_ATTEMPT,
-            enable_slider=ENABLE_SLIDER,
+            captcha_type=CAPTCHA_TYPE,
             reserve_next_day=RESERVE_NEXT_DAY,
+            use_playwright=USE_PLAYWRIGHT,
+            cjy_user=CJY_USER,
+            cjy_pass=CJY_PASS,
+            cjy_soft_id=CJY_SOFT_ID,
         )
         s.get_login_status()
         s.login(username, password)
-        s.requests.headers.update({"Host": "office.chaoxing.com"})
+        s.session.headers.update({"Host": "office.chaoxing.com"})
         suc = s.submit(times, roomid, seatid, action)
         if suc:
             return
@@ -161,14 +185,15 @@ def get_roomid(args1, args2):
     s = reserve(
         sleep_time=SLEEPTIME,
         max_attempt=MAX_ATTEMPT,
-        enable_slider=ENABLE_SLIDER,
+        captcha_type=CAPTCHA_TYPE,
         reserve_next_day=RESERVE_NEXT_DAY,
+        use_playwright=USE_PLAYWRIGHT,
     )
     s.get_login_status()
     s.login(username=username, password=password)
-    s.requests.headers.update({"Host": "office.chaoxing.com"})
+    s.session.headers.update({"Host": "office.chaoxing.com"})
     encode = input("请输入deptldEnc：")
-    s.roomid(encode)
+    s.get_room_list(encode)
 
 
 if __name__ == "__main__":
