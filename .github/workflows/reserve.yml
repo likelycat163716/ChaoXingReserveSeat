@@ -42,4 +42,4 @@ jobs:
           PASSWORDS: ${{ secrets.PASSWORDS }}
         run: |
           cp config.example.json config.json
-          python main.py -m debug --action
+          python main.py -m reserve --action
