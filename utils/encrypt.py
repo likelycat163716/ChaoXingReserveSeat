@@ -34,3 +34,61 @@ def enc(submit_info):
     needed.append(add("[", pattern) + "]")
     seq = "".join(needed)
     return md5(seq.encode("utf-8")).hexdigest()
+
+
+def generate_captcha_key(timestamp: int):
+    captcha_key = md5((str(timestamp) + str(uuid1())).encode("utf-8")).hexdigest()
+    encoded_timestamp = (
+        md5(
+            (
+                str(timestamp)
+                + "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1"
+                + "slide"
+                + captcha_key
+            ).encode("utf-8")
+        ).hexdigest()
+        + ":"
+        + str(int(timestamp) + 0x493E0)
+    )
+    return [captcha_key, encoded_timestamp]
+
+
+def sort_dict_by_keys(dictionary):
+    """将字典按键排序并返回新字典"""
+    sorted_keys = sorted(dictionary.keys())
+    sorted_dict = {key: dictionary[key] for key in sorted_keys}
+    return sorted_dict
+
+
+def verify_param(params, algorithm_value):
+    """
+    生成参数的MD5验证哈希值
+
+    参数:
+        params: 要验证的参数字典
+        algorithm_value: 对应JavaScript中id为'algorithm'的元素值
+
+    返回:
+        计算得到的MD5哈希字符串
+    """
+    # 对参数字典按键排序
+    sorted_params = sort_dict_by_keys(params)
+
+    # 构建哈希字符串列表
+    hash_list = []
+
+    # 遍历排序后的参数，构建格式为 [key=value] 的字符串
+    for key, value in sorted_params.items():
+        # 确保值转换为字符串，与JavaScript行为一致
+        hash_list.append(f"[{key}={str(value)}]")
+
+    # 添加algorithm值
+    hash_list.append(f"[{algorithm_value}]")
+
+    # 连接所有元素形成最终字符串
+    hash_string = "".join(hash_list)
+
+    # 计算MD5哈希值（注意：Python的hashlib返回bytes，需要转换为十六进制字符串）
+    md5_hash = hashlib.md5(hash_string.encode("utf-8")).hexdigest()
+
+    return md5_hash
